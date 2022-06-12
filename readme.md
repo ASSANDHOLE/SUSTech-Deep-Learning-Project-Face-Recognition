@@ -1,6 +1,17 @@
 # Face Recognition Project
 
 ### How to run
+
+---------------------------------------------
+
+***Alternatively use the `setup.sh` script for easy setup.***
+
+The `setup.sh` will *clone* the needed third-party libs (OpenCV not included), download weights, and generate a template configuration file with weight file paths correctly set.
+
+You will still need to add known faces to the `resources/known_faces` folder.
+
+---------------------------------------------
+
 Before you start, make sure to download the required libraries. Follow the instructions in [third_party_libs/readme.md](third_party_libs/readme.md).
 
 Also, I'm not sure if the list dir method is going to work on Windows. You can modify it in [src/utils.cpp](src/utils.cpp).
