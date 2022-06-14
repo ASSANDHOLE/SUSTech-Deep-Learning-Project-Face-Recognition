@@ -56,7 +56,7 @@ else
     echo "  face_recognition_model_path: $current_dir/resources/weights/dlib_face_recognition_resnet_model_v1.dat";
     echo "  mmod_human_face_detector_model_path: $current_dir/resources/weights/mmod_human_face_detector.dat";
     echo "  shape_predictor_model_path: $current_dir/resources/weights/shape_predictor_5_face_landmarks.dat";
-    echo "face_recognition_threshold: 0.35";
+    echo "face_recognition_threshold: 0.36";
     echo "use_video: false";
     echo "video_path: $current_dir/resources/videos/YOUR_VIDEO.MP4";
     echo "known_face_path: $current_dir/resources/known_faces";
