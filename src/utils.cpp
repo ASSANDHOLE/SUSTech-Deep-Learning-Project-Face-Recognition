@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <sstream>
 
 #include <dirent.h>
 #include <algorithm>
@@ -93,9 +94,69 @@ std::vector<std::string> GetFileName(const std::vector<std::string> &paths) {
 }
 // end recognition_utils.h
 
+class NodeWrapper {
+public:
+    explicit NodeWrapper(YAML::Node &&node) : node_(node) {}
+    NodeWrapper operator[](const std::string &key) const {
+        try {
+            auto new_node = node_[key];
+            auto new_wrapper = NodeWrapper(std::move(new_node));
+            new_wrapper.parents_ = std::vector<std::string>(parents_);
+            if (!key_.empty()) {
+                new_wrapper.parents_.push_back(key_);
+            }
+            new_wrapper.key_ = key;
+            return new_wrapper;
+        } catch (std::exception &e) {
+            std::stringstream ss;
+            ss << "Key \"";
+            for (auto &parent : parents_) {
+                ss << parent << ".";
+            }
+            if (!key_.empty()) {
+                ss << key_ << ".";
+            }
+            ss << key;
+            ss << "\" Not found in node.\n";
+            throw std::runtime_error(ss.str());
+        }
+    }
+    template <typename T>
+    T as() const {
+        try {
+            return node_.as<T>();
+        } catch (std::exception &e) {
+            std::stringstream ss;
+            ss << "Key \"";
+            for (auto &parent : parents_) {
+                ss << parent << ".";
+            }
+            if (!key_.empty()) {
+                ss << key_;
+            } else {
+                ss.seekp(-1, std::stringstream::cur);
+            }
+            ss << "\" not exist OR failed to be interpreted as " << typeid(T).name() << ".\n";
+            throw std::runtime_error(ss.str());
+        }
+    }
+
+    template <typename T, typename S>
+    T as(const S& fallback) const {
+        return node_.as<T>(fallback);
+    }
+
+private:
+    const YAML::Node node_;
+    std::string key_;
+    std::vector<std::string> parents_;
+};
+
 // config_utils.h
 Config ReadConfig(const std::string &config_path) {
-    YAML::Node config = YAML::LoadFile(config_path);
+    YAML::Node raw_config = YAML::LoadFile(config_path);
+    NodeWrapper config(std::move(raw_config));
+    // YAML::Node config = YAML::LoadFile(config_path);
     auto weight_node = config["weight"];
     auto face_recognition_model_path = weight_node["face_recognition_model_path"].as<std::string>();
     auto mmod_human_face_detector_model_path = weight_node["mmod_human_face_detector_model_path"].as<std::string>();
