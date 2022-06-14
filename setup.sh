@@ -58,8 +58,8 @@ else
     echo "  shape_predictor_model_path: $current_dir/resources/weights/shape_predictor_5_face_landmarks.dat";
     echo "face_recognition_threshold: 0.35";
     echo "use_video: false";
-    echo "video_path: $current_dir/resources/videos/YOUR_VIDEO.*";
-    echo "known_faces_path: $current_dir/resources/known_faces";
+    echo "video_path: $current_dir/resources/videos/YOUR_VIDEO.MP4";
+    echo "known_face_path: $current_dir/resources/known_faces";
     echo "on_jetson: false";
   } >> ./config.yaml
 fi
