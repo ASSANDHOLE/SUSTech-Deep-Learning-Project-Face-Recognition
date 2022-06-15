@@ -4,6 +4,7 @@
 
 #include <recognition_utils.h>
 #include <config_utils.h>
+#include <video_utils.h>
 
 #include <string>
 #include <vector>
@@ -201,3 +202,36 @@ bool WriteConfig(const Config &config, const std::string &config_path) {
     return true;
 }
 // end config_utils.h
+
+// video_utils.h
+cv::VideoCapture CreateVideoCapture(bool use_video, bool on_jetson, const std::string &video_path) {
+    if (use_video && video_path.empty()) {
+        throw std::runtime_error("Video path is not specified.");
+    }
+    cv::VideoCapture cap;
+    if (use_video) {
+        cap = cv::VideoCapture(video_path);
+    } else if (on_jetson) {
+        int _capture_width = 640;
+        int _capture_height = 360;
+        int _display_width = 640;
+        int _display_height = 360;
+        int _framerate = 10;
+        int _flip_method = 0;
+        std::string _pipeline = JetsonNanoGstreamerPipeline(_capture_width,
+                                                            _capture_height,
+                                                            _display_width,
+                                                            _display_height,
+                                                            _framerate,
+                                                            _flip_method);
+        std::cout << "Using pipeline: \n\t" << _pipeline << "\n";
+        cap = cv::VideoCapture(_pipeline, cv::CAP_GSTREAMER);
+    } else {
+        cap = cv::VideoCapture(0);
+    }
+    if (!cap.isOpened()) {
+        throw std::runtime_error("can't open VideoCapture}");
+    }
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 0);
+}
+// end video_utils.h
