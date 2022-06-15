@@ -233,5 +233,6 @@ cv::VideoCapture CreateVideoCapture(bool use_video, bool on_jetson, const std::s
         throw std::runtime_error("can't open VideoCapture}");
     }
     cap.set(cv::CAP_PROP_BUFFERSIZE, 0);
+    return cap;
 }
 // end video_utils.h
