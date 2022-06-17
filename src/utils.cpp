@@ -73,7 +73,7 @@ inline cv::Rect DlibRectToCvRect(const dlib::rectangle &r) {
 void DrawRectangleWithName(cv::Mat &img, const std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> &rect){
     for (const auto & i : rect) {
         auto cv_rect = DlibRectToCvRect(std::get<0>(i));
-        if (std::get<1>(i).compare("unknow") == 0){
+        if (std::get<1>(i) == "unknow"){
             cv::rectangle(img, cv_rect, std::get<2>(i), 2);
             cv::putText(img, std::get<1>(i), cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, std::get<2>(i), 2);
         }
@@ -100,7 +100,7 @@ std::vector<std::string> GetFileName(const std::vector<std::string> &paths) {
     return res;
 }
 
-std::vector<cv::Scalar> GetColours(const size_t len){
+std::vector<cv::Scalar> GetColors(size_t len){
     std::vector<cv::Scalar> res;
     for (size_t i = 0; i < len; i++) {
         res.push_back(cv::Scalar(rand()&255, rand()&255, rand()&255));
@@ -249,4 +249,32 @@ cv::VideoCapture CreateVideoCapture(bool use_video, bool on_jetson, const std::s
     cap.set(cv::CAP_PROP_BUFFERSIZE, 0);
     return cap;
 }
+
+
+cv::Mat NoDelayCameraCapture::get() {
+    while (!has_new_.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    mutex_.lock();
+    has_new_.store(false);
+    auto res = image_.clone();
+    mutex_.unlock();
+    return res;
+}
+
+void NoDelayCameraCapture::run()  {
+    while (running_) {
+        cap_ >> tmp_;
+        if (tmp_.empty()) {
+            continue;
+        }
+        if (!mutex_.try_lock()) {
+            continue;
+        }
+        image_ = std::move(tmp_);
+        has_new_.store(true);
+        mutex_.unlock();
+    }
+}
+
 // end video_utils.h
