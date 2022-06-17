@@ -67,9 +67,10 @@ image_t FromCvMat(const cv::Mat &mat);
 
 cv::Mat ToCvMat(image_t &img);
 
-void DrawRectangleWithName(cv::Mat &img, const std::vector<std::pair<dlib::rectangle, std::string>> &rect, const cv::Scalar &color);
+void DrawRectangleWithName(cv::Mat &img, const std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> &rect);
 
 std::vector<std::string> GetFileName(const std::vector<std::string> &paths);
 
+std::vector<cv::Scalar> GetColours(const size_t len);
 
 #endif //EXAMPLES_RECOGNITION_UTILS_H
