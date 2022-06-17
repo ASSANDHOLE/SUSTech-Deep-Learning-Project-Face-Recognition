@@ -70,11 +70,17 @@ inline cv::Rect DlibRectToCvRect(const dlib::rectangle &r) {
     return {cv::Point2i(r.left(), r.top()), cv::Point2i(r.right() + 1, r.bottom() + 1)};
 }
 
-void DrawRectangleWithName(cv::Mat &img, const std::vector<std::pair<dlib::rectangle, std::string>> &rect, const cv::Scalar &color) {
+void DrawRectangleWithName(cv::Mat &img, const std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> &rect){
     for (const auto & i : rect) {
-        auto cv_rect = DlibRectToCvRect(i.first);
-        cv::rectangle(img, cv_rect, color, 2);
-        cv::putText(img, i.second, cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, color, 2);
+        auto cv_rect = DlibRectToCvRect(std::get<0>(i));
+        if (std::get<1>(i).compare("unknow") == 0){
+            cv::rectangle(img, cv_rect, std::get<2>(i), 2);
+            cv::putText(img, std::get<1>(i), cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, std::get<2>(i), 2);
+        }
+        else{
+            cv::rectangle(img, cv_rect, std::get<2>(i), 2);
+            cv::putText(img, std::get<1>(i), cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, std::get<2>(i), 2);
+        }
     }
 }
 
@@ -90,6 +96,14 @@ std::vector<std::string> GetFileName(const std::vector<std::string> &paths) {
         } else {
             res.push_back(path.substr(pos + 1, pos2 - pos - 1));
         }
+    }
+    return res;
+}
+
+std::vector<cv::Scalar> GetColours(const size_t len){
+    std::vector<cv::Scalar> res;
+    for (size_t i = 0; i < len; i++) {
+        res.push_back(cv::Scalar(rand()&255, rand()&255, rand()&255));
     }
     return res;
 }

@@ -20,7 +20,7 @@ const char *kConfigPath = "./config.yaml";
 
 
 void RecognizeFace(cv::VideoCapture &cap, const Config &config) {
-    const cv::Scalar COLOR(0, 0, 255);  // Red (BGR)
+    const cv::Scalar UNKNOW_COLOR(0, 0, 255);  // Red (BGR)
     dlib::shape_predictor sp;
     dlib::deserialize(config.shape_predictor_model_path) >> sp;
     anet_type net;
@@ -31,6 +31,7 @@ void RecognizeFace(cv::VideoCapture &cap, const Config &config) {
     auto known_face_files = ListDirectory(config.known_face_path);
     auto known_face_names = GetFileName(known_face_files);
     auto known_faces = LoadImages(known_face_files);
+    auto colour_list = GetColours(known_face_names.size());
     std::vector<face_descriptor_t> known_face_descriptors = net(known_faces);
     // auto cap = CreateVideoCapture(config.use_video, config.on_jetson, config.video_path);
     cv::Mat frame;
@@ -63,11 +64,13 @@ void RecognizeFace(cv::VideoCapture &cap, const Config &config) {
         } else {
             std::vector<face_descriptor_t> face_descriptors = net(faces);
 
-            std::vector<std::pair<dlib::rectangle, std::string>> result;
+            std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> result;
             for (size_t i = 0; i < face_descriptors.size(); ++i) {
                 int which = -1;
+                int unknow = -1;
                 double dist;
                 double best_dist = 1e6;
+                double best_unknow_dist = 1e6;
                 for (int j = 0; j < known_face_descriptors.size(); ++j) {
                     if ((dist = length(face_descriptors[i] - known_face_descriptors[j])) < config.face_recognition_threshold) {
                         // dist = length(face_descriptors[i] - known_face_descriptors[j]);
@@ -77,12 +80,24 @@ void RecognizeFace(cv::VideoCapture &cap, const Config &config) {
                             which = j;
                         }
                     }
+                    else {
+                        
+                        if (dist < best_unknow_dist) {
+                            best_unknow_dist = dist;
+                            unknow = j;
+                        }
+                    }
+                    // printf("dist: %.2f\n",  dist);
                 }
                 if (which >= 0) {
-                    result.emplace_back(face_rects[i], known_face_names[which]);
+                    result.emplace_back(face_rects[i], known_face_names[which], colour_list[which]);
+                }
+                else if (unknow >= 0){
+                    printf("find unknow face\n");
+                    result.emplace_back(face_rects[i], "unknow", UNKNOW_COLOR);
                 }
             }
-            DrawRectangleWithName(frame, result, COLOR);
+            DrawRectangleWithName(frame, result);
         }
         cv::imshow("result", frame);
         if (cv::waitKey(30) >= 0) {
