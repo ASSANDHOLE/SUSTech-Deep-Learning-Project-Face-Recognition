@@ -2,14 +2,17 @@
 // Created by anguangyan on 5/20/22.
 //
 
-#include "dlib/dnn.h"
-#include "dlib/clustering.h"
-#include "dlib/string.h"
+#include <dlib/dnn.h>
+#include <dlib/clustering.h>
+#include <dlib/string.h>
+#include <cstring>
+#include <chrono>
 
 #include <opencv2/opencv.hpp>
 
-#include "recognition_utils.h"
-#include "config_utils.h"
+#include <recognition_utils.h>
+#include <config_utils.h>
+#include <video_utils.h>
 
 #ifdef CONFIG_PATH
 const char *kConfigPath = CONFIG_PATH;
@@ -17,19 +20,16 @@ const char *kConfigPath = CONFIG_PATH;
 const char *kConfigPath = "./config.yaml";
 #endif
 
-std::string JetsonNanoGstreamerPipeline(int capture_width, int capture_height,
-                                        int display_width, int display_height,
-                                        int framerate, int flip_method) {
-    return "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)" + std::to_string(capture_width) + ", height=(int)" +
-           std::to_string(capture_height) + ", framerate=(fraction)" + std::to_string(framerate) +
-           "/1 ! nvvidconv flip-method=" + std::to_string(flip_method) + " ! video/x-raw, width=(int)" + std::to_string(display_width) + ", height=(int)" +
-           std::to_string(display_height) + ", format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink";
+void DrawFps(cv::Mat &frame, double fps) {
+    fps = fps > 1000.0 ? 0.0 : fps;
+    char str[20];
+    sprintf(str, "FPS: %.2f", fps);
+    cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 0, 255), 3);
 }
 
-
-int main(int argc, char **argv) try {
-    auto config = ReadConfig(kConfigPath);
-    const cv::Scalar COLOR(0, 0, 255);  // Red (BGR)
+template <typename CaptureWrapper>
+void RecognizeFace(CaptureWrapper &cap, const Config &config) {
+    const cv::Scalar UNKNOWN_COLOR(0, 0, 255);  // Red (BGR)
     dlib::shape_predictor sp;
     dlib::deserialize(config.shape_predictor_model_path) >> sp;
     anet_type net;
@@ -40,35 +40,15 @@ int main(int argc, char **argv) try {
     auto known_face_files = ListDirectory(config.known_face_path);
     auto known_face_names = GetFileName(known_face_files);
     auto known_faces = LoadImages(known_face_files);
+    auto colour_list = GetColors(known_face_names.size());
     std::vector<face_descriptor_t> known_face_descriptors = net(known_faces);
-    cv::VideoCapture cap;
-    if (config.use_video) {
-        cap = cv::VideoCapture(config.video_path);
-    } else if (config.on_jetson) {
-        int _capture_width = 640;
-        int _capture_height = 360;
-        int _display_width = 640;
-        int _display_height = 360;
-        int _framerate = 10;
-        int _flip_method = 0;
-        std::string _pipeline = JetsonNanoGstreamerPipeline(_capture_width,
-                                                            _capture_height,
-                                                            _display_width,
-                                                            _display_height,
-                                                            _framerate,
-                                                            _flip_method);
-        std::cout << "Using pipeline: \n\t" << _pipeline << "\n";
-        cap = cv::VideoCapture(_pipeline, cv::CAP_GSTREAMER);
-    } else {
-        cap = cv::VideoCapture(0);
-    }
-    if (!cap.isOpened()) {
-        throw std::runtime_error("can't open camera");
-    }
-    cap.set(cv::CAP_PROP_BUFFERSIZE, 0);
-    cv::Mat frame;
+    // auto cap = CreateVideoCapture(config.use_video, config.on_jetson, config.video_path);
+    auto last_frame_time = std::chrono::steady_clock::now();
+    auto this_frame_time = std::chrono::steady_clock::now();
+    long duration;
+
     while (true) {
-        cap >> frame;
+        cv::Mat frame = cap.get();
         if (frame.empty()) {
             if (config.use_video) {
                 break;
@@ -93,14 +73,17 @@ int main(int argc, char **argv) try {
 
         if (faces.empty()) {
             std::cout << "no face detected" << std::endl;
+            continue;
         } else {
             std::vector<face_descriptor_t> face_descriptors = net(faces);
 
-            std::vector<std::pair<dlib::rectangle, std::string>> result;
+            std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> result;
             for (size_t i = 0; i < face_descriptors.size(); ++i) {
                 int which = -1;
+                int unknown = -1;
                 double dist;
                 double best_dist = 1e6;
+                double best_unknown_dist = 1e6;
                 for (int j = 0; j < known_face_descriptors.size(); ++j) {
                     if ((dist = length(face_descriptors[i] - known_face_descriptors[j])) < config.face_recognition_threshold) {
                         // dist = length(face_descriptors[i] - known_face_descriptors[j]);
@@ -110,18 +93,49 @@ int main(int argc, char **argv) try {
                             which = j;
                         }
                     }
+                    else {
+                        
+                        if (dist < best_unknown_dist) {
+                            best_unknown_dist = dist;
+                            unknown = j;
+                        }
+                    }
+                    // printf("dist: %.2f\n",  dist);
                 }
                 if (which >= 0) {
-                    result.emplace_back(face_rects[i], known_face_names[which]);
+                    result.emplace_back(face_rects[i], known_face_names[which], colour_list[which]);
+                }
+                else if (unknown >= 0){
+                    printf("find unknown face\n");
+                    result.emplace_back(face_rects[i], "unknown", UNKNOWN_COLOR);
                 }
             }
-            DrawRectangleWithName(frame, result, COLOR);
+            DrawRectangleWithName(frame, result);
         }
+        this_frame_time = std::chrono::steady_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::nanoseconds>(this_frame_time - last_frame_time).count();
+        last_frame_time = this_frame_time;
+        double fps = 1.0 / (duration * 1e-9);
+        DrawFps(frame, fps);
         cv::imshow("result", frame);
         if (cv::waitKey(30) >= 0) {
             break;
         }
     }
-} catch (std::exception &e) {
-    std::cout << e.what() << std::endl;
+}
+
+int main(int argc, char **argv) {
+    try {
+        auto config = ReadConfig(kConfigPath);
+        auto cap = CreateVideoCapture(config.use_video, config.on_jetson, config.video_path);
+        if (config.use_video) {
+            VideoCaptureWrapper res{std::move(cap)};
+            RecognizeFace(res, config);
+        } else {
+            NoDelayCameraCapture res{std::move(cap)};
+            RecognizeFace(res, config);
+        }
+    } catch (std::exception &e) {
+        std::cout << e.what() << std::endl;
+    }
 }

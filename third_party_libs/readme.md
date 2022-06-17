@@ -4,7 +4,7 @@
 You should have `OpenCV` installed on your system.
 Please do **NOT** download the source code of `OpenCV` here.
 
-Tested with `OpenCV` version `4.5.5` on `Ubuntu 20.04` and `4.5.0` on `Jetson Nano`
+Tested with `OpenCV` version `4.5.5` on `Ubuntu 20.04`, `4.5.0` on `Jetson Nano`, and `4.6.0` on `Ubuntu 22.04`.
 
 Some extra functions in this project requires `python3` and `opencv-python`.
 

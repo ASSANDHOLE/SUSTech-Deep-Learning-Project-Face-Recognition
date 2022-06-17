@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.4)
 project(DeepLearningProject)
 
+set(CMAKE_CXX_STANDARD 14)
+
 add_subdirectory(./third_party_libs/dlib dlib_build)
 add_subdirectory(./third_party_libs/yaml-cpp yaml_cpp_build)
 

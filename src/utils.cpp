@@ -4,11 +4,13 @@
 
 #include <recognition_utils.h>
 #include <config_utils.h>
+#include <video_utils.h>
 
 #include <string>
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <random>
 
 #include <dirent.h>
 #include <algorithm>
@@ -16,6 +18,13 @@
 #include <dlib/opencv.h>
 
 #include <yaml-cpp/yaml.h>
+
+uchar GetRandomUchar() {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(0, 255);
+    return dis(gen);
+}
 
 // recognition_utils.h
 std::vector<image_t> LoadImages(const file_names_t &paths) {
@@ -69,11 +78,17 @@ inline cv::Rect DlibRectToCvRect(const dlib::rectangle &r) {
     return {cv::Point2i(r.left(), r.top()), cv::Point2i(r.right() + 1, r.bottom() + 1)};
 }
 
-void DrawRectangleWithName(cv::Mat &img, const std::vector<std::pair<dlib::rectangle, std::string>> &rect, const cv::Scalar &color) {
+void DrawRectangleWithName(cv::Mat &img, const std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> &rect){
     for (const auto & i : rect) {
-        auto cv_rect = DlibRectToCvRect(i.first);
-        cv::rectangle(img, cv_rect, color, 2);
-        cv::putText(img, i.second, cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, color, 2);
+        auto cv_rect = DlibRectToCvRect(std::get<0>(i));
+        if (std::get<1>(i) == "unknow"){
+            cv::rectangle(img, cv_rect, std::get<2>(i), 2);
+            cv::putText(img, std::get<1>(i), cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, std::get<2>(i), 2);
+        }
+        else{
+            cv::rectangle(img, cv_rect, std::get<2>(i), 2);
+            cv::putText(img, std::get<1>(i), cv_rect.tl(), cv::FONT_HERSHEY_SIMPLEX, 2, std::get<2>(i), 2);
+        }
     }
 }
 
@@ -89,6 +104,14 @@ std::vector<std::string> GetFileName(const std::vector<std::string> &paths) {
         } else {
             res.push_back(path.substr(pos + 1, pos2 - pos - 1));
         }
+    }
+    return res;
+}
+
+std::vector<cv::Scalar> GetColors(size_t len){
+    std::vector<cv::Scalar> res;
+    for (size_t i = 0; i < len; i++) {
+        res.emplace_back(GetRandomUchar(), GetRandomUchar(), GetRandomUchar());
     }
     return res;
 }
@@ -201,3 +224,65 @@ bool WriteConfig(const Config &config, const std::string &config_path) {
     return true;
 }
 // end config_utils.h
+
+// video_utils.h
+cv::VideoCapture CreateVideoCapture(bool use_video, bool on_jetson, const std::string &video_path) {
+    if (use_video && video_path.empty()) {
+        throw std::runtime_error("Video path is not specified.");
+    }
+    cv::VideoCapture cap;
+    if (use_video) {
+        cap = cv::VideoCapture(video_path);
+    } else if (on_jetson) {
+        int _capture_width = 640;
+        int _capture_height = 360;
+        int _display_width = 640;
+        int _display_height = 360;
+        int _framerate = 10;
+        int _flip_method = 0;
+        std::string _pipeline = JetsonNanoGstreamerPipeline(_capture_width,
+                                                            _capture_height,
+                                                            _display_width,
+                                                            _display_height,
+                                                            _framerate,
+                                                            _flip_method);
+        std::cout << "Using pipeline: \n\t" << _pipeline << "\n";
+        cap = cv::VideoCapture(_pipeline, cv::CAP_GSTREAMER);
+    } else {
+        cap = cv::VideoCapture(0);
+    }
+    if (!cap.isOpened()) {
+        throw std::runtime_error("can't open VideoCapture}");
+    }
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 0);
+    return cap;
+}
+
+
+cv::Mat NoDelayCameraCapture::get() {
+    while (!has_new_.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    mutex_.lock();
+    has_new_.store(false);
+    auto res = image_.clone();
+    mutex_.unlock();
+    return res;
+}
+
+void NoDelayCameraCapture::run()  {
+    while (running_) {
+        cap_ >> tmp_;
+        if (tmp_.empty()) {
+            continue;
+        }
+        if (!mutex_.try_lock()) {
+            continue;
+        }
+        image_ = std::move(tmp_);
+        has_new_.store(true);
+        mutex_.unlock();
+    }
+}
+
+// end video_utils.h
