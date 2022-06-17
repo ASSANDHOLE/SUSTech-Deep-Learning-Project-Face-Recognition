@@ -2,14 +2,16 @@
 // Created by anguangyan on 5/20/22.
 //
 
-#include "dlib/dnn.h"
-#include "dlib/clustering.h"
-#include "dlib/string.h"
+#include <dlib/dnn.h>
+#include <dlib/clustering.h>
+#include <dlib/string.h>
+#include <cstring>
+#include <chrono>
 
 #include <opencv2/opencv.hpp>
 
-#include "recognition_utils.h"
-#include "config_utils.h"
+#include <recognition_utils.h>
+#include <config_utils.h>
 #include <video_utils.h>
 
 #ifdef CONFIG_PATH
@@ -17,6 +19,13 @@ const char *kConfigPath = CONFIG_PATH;
 #else
 const char *kConfigPath = "./config.yaml";
 #endif
+
+void DrawFps(cv::Mat &frame, double fps) {
+    fps = fps > 1000.0 ? 0.0 : fps;
+    char str[20];
+    sprintf(str, "FPS: %.2f", fps);
+    cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 0, 255), 3);
+}
 
 template <typename CaptureWrapper>
 void RecognizeFace(CaptureWrapper &cap, const Config &config) {
@@ -34,6 +43,10 @@ void RecognizeFace(CaptureWrapper &cap, const Config &config) {
     auto colour_list = GetColors(known_face_names.size());
     std::vector<face_descriptor_t> known_face_descriptors = net(known_faces);
     // auto cap = CreateVideoCapture(config.use_video, config.on_jetson, config.video_path);
+    auto last_frame_time = std::chrono::steady_clock::now();
+    auto this_frame_time = std::chrono::steady_clock::now();
+    long duration;
+
     while (true) {
         cv::Mat frame = cap.get();
         if (frame.empty()) {
@@ -60,6 +73,7 @@ void RecognizeFace(CaptureWrapper &cap, const Config &config) {
 
         if (faces.empty()) {
             std::cout << "no face detected" << std::endl;
+            continue;
         } else {
             std::vector<face_descriptor_t> face_descriptors = net(faces);
 
@@ -98,6 +112,11 @@ void RecognizeFace(CaptureWrapper &cap, const Config &config) {
             }
             DrawRectangleWithName(frame, result);
         }
+        this_frame_time = std::chrono::steady_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::nanoseconds>(this_frame_time - last_frame_time).count();
+        last_frame_time = this_frame_time;
+        double fps = 1.0 / (duration * 1e-9);
+        DrawFps(frame, fps);
         cv::imshow("result", frame);
         if (cv::waitKey(30) >= 0) {
             break;

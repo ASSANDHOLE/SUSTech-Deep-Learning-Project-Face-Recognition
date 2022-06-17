@@ -10,6 +10,7 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <random>
 
 #include <dirent.h>
 #include <algorithm>
@@ -17,6 +18,13 @@
 #include <dlib/opencv.h>
 
 #include <yaml-cpp/yaml.h>
+
+uchar GetRandomUchar() {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(0, 255);
+    return dis(gen);
+}
 
 // recognition_utils.h
 std::vector<image_t> LoadImages(const file_names_t &paths) {
@@ -103,7 +111,7 @@ std::vector<std::string> GetFileName(const std::vector<std::string> &paths) {
 std::vector<cv::Scalar> GetColors(size_t len){
     std::vector<cv::Scalar> res;
     for (size_t i = 0; i < len; i++) {
-        res.push_back(cv::Scalar(rand()&255, rand()&255, rand()&255));
+        res.emplace_back(GetRandomUchar(), GetRandomUchar(), GetRandomUchar());
     }
     return res;
 }
