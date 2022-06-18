@@ -42,6 +42,13 @@ video_path: /path/to/video
 known_face_path: /path/to/known_face_path
 # if on_jetson is true and use_video is false, the Gstreamer will be used to capture video on Jetson Nano
 on_jetson: false
+# "random" for each face in database get a random color, 
+# "[b, g, r]" (0 <= b, g, r <= 255) for each face in database get the color [b, g, r]
+# note that if you use color vector, you should do it with quotes,
+# e.g. correct used is (bbox_color: "[255, 0, 0]"), not (bbox_color: [255, 0, 0])
+bbox_color: random
+# if set to true, print configuration information, known face names, and distance between face comparison.
+debug: false
 ```
 
 Then, run the following command to build the project:

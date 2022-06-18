@@ -61,5 +61,7 @@ else
     echo "video_path: $current_dir/resources/videos/YOUR_VIDEO.MP4";
     echo "known_face_path: $current_dir/resources/known_faces";
     echo "on_jetson: false";
+    echo "bbox_color: random";
+    echo "debug: true";
   } >> ./config.yaml
 fi

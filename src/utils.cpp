@@ -26,6 +26,27 @@ uchar GetRandomUchar() {
     return dis(gen);
 }
 
+cv::Scalar GetRandomColor() {
+    return {
+        static_cast<double>(GetRandomUchar()),
+        static_cast<double>(GetRandomUchar()),
+        static_cast<double>(GetRandomUchar())
+    };
+}
+
+ColorGenerator GetColorGenerator(const std::vector<int> &value) {
+    auto c0 = value[0];
+    auto c1 = value[1];
+    auto c2 = value[2];
+    return [c0, c1, c2]() {
+        return cv::Scalar{
+            static_cast<double>(c0),
+            static_cast<double>(c1),
+            static_cast<double>(c2)
+        };
+    };
+}
+
 // recognition_utils.h
 std::vector<image_t> LoadImages(const file_names_t &paths) {
     std::vector<image_t> images;
@@ -108,10 +129,10 @@ std::vector<std::string> GetFileName(const std::vector<std::string> &paths) {
     return res;
 }
 
-std::vector<cv::Scalar> GetColors(size_t len){
+std::vector<cv::Scalar> GetColors(size_t len, const Config &config) {
     std::vector<cv::Scalar> res;
     for (size_t i = 0; i < len; i++) {
-        res.emplace_back(GetRandomUchar(), GetRandomUchar(), GetRandomUchar());
+        res.push_back(config.bbox_color());
     }
     return res;
 }
@@ -175,7 +196,34 @@ private:
     std::vector<std::string> parents_;
 };
 
+std::vector<std::string> SplitString(const std::string &str, const std::string &delim) {
+    std::vector<std::string> res;
+    size_t pos = 0;
+    while (pos < str.size()) {
+        size_t next_pos = str.find(delim, pos);
+        if (next_pos == std::string::npos) {
+            res.push_back(str.substr(pos));
+            break;
+        } else {
+            res.push_back(str.substr(pos, next_pos - pos));
+        }
+        pos = next_pos + delim.size();
+    }
+    return res;
+}
+
 // config_utils.h
+std::ostream &operator<<(std::ostream &os, const Config &config) {
+    os << "Config: "
+       << "\n    face_recognition_threshold: " << config.face_recognition_threshold
+       << "\n    use_video: " << config.use_video
+       << "\n    video_path: " << config.video_path
+       << "\n    known_face_path: " << config.known_face_path
+       << "\n    on_jetson: " << config.on_jetson
+       << "\n    debug: " << config.debug;
+    return os;
+}
+
 Config ReadConfig(const std::string &config_path) {
     YAML::Node raw_config = YAML::LoadFile(config_path);
     NodeWrapper config(std::move(raw_config));
@@ -193,15 +241,34 @@ Config ReadConfig(const std::string &config_path) {
     if (known_face_path[known_face_path.size() - 1] != '/') {
         known_face_path += '/';
     }
+    auto bbox_color = config["bbox_color"].as<std::string>();
+    auto debug = config["debug"].as<bool>();
+    ColorGenerator generator;
+    if (bbox_color == "random") {
+        generator = GetRandomColor;
+    } else {
+        bbox_color.erase(std::remove_if(bbox_color.begin(), bbox_color.end(), [](char c) {
+            return c == ' ' || c == '[' || c == ']';
+        }), bbox_color.end());
+        std::vector<int> color_vec;
+        auto split_str = SplitString(bbox_color, ",");
+        for (const auto &str : split_str) {
+            color_vec.push_back(std::stoi(str));
+        }
+        assert(color_vec.size() == 3);
+        generator = GetColorGenerator(color_vec);
+    }
     return {
-        face_recognition_model_path,
-        mmod_human_face_detector_model_path,
-        shape_predictor_model_path,
-        face_recognition_threshold,
-        use_video,
-        video_path,
-        known_face_path,
-        on_jetson
+            face_recognition_model_path,
+            mmod_human_face_detector_model_path,
+            shape_predictor_model_path,
+            face_recognition_threshold,
+            use_video,
+            video_path,
+            known_face_path,
+            on_jetson,
+            generator,
+            debug
     };
 }
 
@@ -218,6 +285,8 @@ bool WriteConfig(const Config &config, const std::string &config_path) {
     config_node["video_path"] = config.video_path;
     config_node["known_face_path"] = config.known_face_path;
     config_node["on_jetson"] = config.on_jetson;
+    config_node["bbox_color"] = "random";  // or "[123, 234, 255]"
+    config_node["debug"] = config.debug;
     std::ofstream fout(config_path);
     fout << config_node;
     fout.close();

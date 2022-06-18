@@ -5,7 +5,14 @@
 #ifndef EXAMPLES_CONFIG_UTILS_H
 #define EXAMPLES_CONFIG_UTILS_H
 
+#include <opencv2/opencv.hpp>
+#include <ostream>
+
+using ColorGenerator = std::function<cv::Scalar()>;
+
 struct Config {
+    friend std::ostream &operator<<(std::ostream &os, const Config &config);
+
     const std::string face_recognition_model_path;
     const std::string mmod_human_face_detector_model_path;
     const std::string shape_predictor_model_path;
@@ -14,6 +21,8 @@ struct Config {
     const std::string video_path;
     const std::string known_face_path;
     const bool on_jetson;
+    const ColorGenerator bbox_color;
+    const bool debug;
 };
 
 Config ReadConfig(const std::string &config_path);

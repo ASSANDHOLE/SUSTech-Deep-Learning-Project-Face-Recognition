@@ -27,6 +27,21 @@ void DrawFps(cv::Mat &frame, double fps) {
     cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 0, 255), 3);
 }
 
+#define Println(x) std::cout << (x) << std::endl
+#define LINE_SPLITER "------------------------------"
+
+void PrintDebugInfo(const Config &config, const std::vector<std::string> &names) {
+    Println("\n------------------------------");
+    std::cout << "Config path: " << kConfigPath << std::endl;
+    Println(config);
+    Println("------------------------------");
+    for (const auto &name : names) {
+        std::cout << '<' << name << ">, ";
+    }
+    std::cout << std::endl;
+    Println("------------------------------");
+}
+
 template <typename CaptureWrapper>
 void RecognizeFace(CaptureWrapper &cap, const Config &config) {
     const cv::Scalar UNKNOWN_COLOR(0, 0, 255);  // Red (BGR)
@@ -40,12 +55,16 @@ void RecognizeFace(CaptureWrapper &cap, const Config &config) {
     auto known_face_files = ListDirectory(config.known_face_path);
     auto known_face_names = GetFileName(known_face_files);
     auto known_faces = LoadImages(known_face_files);
-    auto colour_list = GetColors(known_face_names.size());
+    auto colour_list = GetColors(known_face_names.size(), config);
     std::vector<face_descriptor_t> known_face_descriptors = net(known_faces);
     // auto cap = CreateVideoCapture(config.use_video, config.on_jetson, config.video_path);
     auto last_frame_time = std::chrono::steady_clock::now();
     auto this_frame_time = std::chrono::steady_clock::now();
     long duration;
+
+    if (config.debug) {
+        PrintDebugInfo(config, known_face_names);
+    }
 
     while (true) {
         cv::Mat frame = cap.get();
@@ -53,7 +72,7 @@ void RecognizeFace(CaptureWrapper &cap, const Config &config) {
             if (config.use_video) {
                 break;
             } else {
-                std::cout << "empty frame" << std::endl;
+                std::cout << "got empty frame" << std::endl;
                 continue;
             }
         }
@@ -71,42 +90,27 @@ void RecognizeFace(CaptureWrapper &cap, const Config &config) {
             face_rects.push_back(face);
         }
 
-        if (faces.empty()) {
-            std::cout << "no face detected" << std::endl;
-            continue;
-        } else {
+        if (!faces.empty()) {
             std::vector<face_descriptor_t> face_descriptors = net(faces);
-
             std::vector<std::tuple<dlib::rectangle, std::string, cv::Scalar>> result;
             for (size_t i = 0; i < face_descriptors.size(); ++i) {
                 int which = -1;
-                int unknown = -1;
                 double dist;
                 double best_dist = 1e6;
-                double best_unknown_dist = 1e6;
                 for (int j = 0; j < known_face_descriptors.size(); ++j) {
                     if ((dist = length(face_descriptors[i] - known_face_descriptors[j])) < config.face_recognition_threshold) {
-                        // dist = length(face_descriptors[i] - known_face_descriptors[j]);
-                        printf("%s: %.2f\n", known_face_names[j].c_str(), dist);
+                        if (config.debug) {
+                            printf("%s: %.2f\n", known_face_names[j].c_str(), dist);
+                        }
                         if (dist < best_dist) {
                             best_dist = dist;
                             which = j;
                         }
                     }
-                    else {
-                        
-                        if (dist < best_unknown_dist) {
-                            best_unknown_dist = dist;
-                            unknown = j;
-                        }
-                    }
-                    // printf("dist: %.2f\n",  dist);
                 }
                 if (which >= 0) {
                     result.emplace_back(face_rects[i], known_face_names[which], colour_list[which]);
-                }
-                else if (unknown >= 0){
-                    printf("find unknown face\n");
+                } else {
                     result.emplace_back(face_rects[i], "unknown", UNKNOWN_COLOR);
                 }
             }
